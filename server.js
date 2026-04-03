@@ -52,14 +52,14 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Postman eller server-till-server requests kan ha undefined origin
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      return callback(new Error('CORS-förfrågan blockerad av servern.'));
-    }
-  },
+  console.log('CORS check origin:', origin);
+  if (!origin) return callback(null, true); // Postman eller server-side requests
+  if (allowedOrigins.includes(origin)) {
+    callback(null, true);
+  } else {
+    callback(new Error(`CORS blockerad: ${origin}`));
+  }
+},
   credentials: true, // 🔑 tillåter cookies
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
