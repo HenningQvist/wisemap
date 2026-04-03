@@ -39,22 +39,33 @@ if (process.env.NODE_ENV === 'production') {
 app.use(helmet());
 app.use(process.env.NODE_ENV !== 'production' ? morgan('dev') : morgan('combined'));
 
-// ✅ CORS Middleware
-const allowedOrigins = process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim());
+// ✅ Ersätt din CORS-konfiguration med detta:
+
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
   if (origin && allowedOrigins.includes(origin)) {
-    res.header('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Origin, X-Requested-With, Content-Type, Accept, Authorization'
+    );
+    res.setHeader(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PUT, DELETE, OPTIONS'
+    );
   }
-  res.header('Access-Control-Allow-Credentials', 'true');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
 
-  if (req.method === 'OPTIONS') return res.sendStatus(200); // ✅ Preflight
+  // Preflight requests ska alltid svara direkt
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+
   next();
 });
-
 // JSON och cookies
 app.use(express.json());
 app.use(cookieParser());
