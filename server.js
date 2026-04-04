@@ -53,48 +53,51 @@ app.use((req, res, next) => {
 });
 
 
-// 🔍 CORS DEBUG + HANDLING
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean);
-
-console.log('🌐 Tillåtna origins:', allowedOrigins);
+// 🔥 HÅRDKODAD CORS (DEBUG / PRODUKTION SAFE)
+const FRONTEND_URL = 'https://wisemap.netlify.app';
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
-  console.log('🔎 CORS check för origin:', origin);
+  console.log('\n🌐 CORS CHECK');
+  console.log('➡️ Request origin:', origin);
 
-  if (!origin) {
-    console.log('ℹ️ Ingen origin (Postman/server request)');
-  }
-
-  if (origin && allowedOrigins.includes(origin)) {
-    console.log('✅ Origin TILLÅTEN');
-    res.setHeader('Access-Control-Allow-Origin', origin);
+  // Tillåt endast din frontend
+  if (origin === FRONTEND_URL) {
+    console.log('✅ Origin tillåten');
+    res.setHeader('Access-Control-Allow-Origin', FRONTEND_URL);
   } else if (origin) {
-    console.log('❌ Origin BLOCKERAD:', origin);
+    console.log('❌ Origin blockerad:', origin);
+  } else {
+    console.log('ℹ️ Ingen origin (server-to-server request)');
   }
 
+  // Viktigt för cookies / auth
   res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  // Headers som tillåts
   res.setHeader(
     'Access-Control-Allow-Headers',
     'Origin, X-Requested-With, Content-Type, Accept, Authorization'
   );
+
+  // Metoder som tillåts
   res.setHeader(
     'Access-Control-Allow-Methods',
     'GET, POST, PUT, DELETE, OPTIONS'
   );
 
+  // 🔥 Viktigt för caching/CDN
+  res.setHeader('Vary', 'Origin');
+
+  // Hantera preflight requests
   if (req.method === 'OPTIONS') {
-    console.log('⚡ PRELIGHT (OPTIONS) STOPPAD → 200 OK');
+    console.log('⚡ Preflight request → 200 OK');
     return res.sendStatus(200);
   }
 
   next();
 });
-
 
 // JSON & cookies
 app.use(express.json());
