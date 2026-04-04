@@ -3,7 +3,6 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const rateLimit = require('express-rate-limit');
 const userModel = require('../models/userModel');
-const loginAttemptModel = require('../models/loginAttempt');
 
 // 🛡️ RATE LIMITER för login
 const loginRateLimiter = rateLimit({
@@ -28,26 +27,19 @@ const createToken = (user) => {
   );
 };
 
-// 🔐 Sätt cookies korrekt i dev och prod
-const setAuthCookies = (res, token, participant_id = null) => {
+// 🔐 Sätt cookies korrekt
+const setAuthCookies = (res, token) => {
   const isProd = process.env.NODE_ENV === 'production';
-
   const cookieOptions = {
-    httpOnly: true,                   // ⭐ JavaScript kan ej läsa cookie
-    secure: isProd,                   // HTTPS krävs i production
-    sameSite: isProd ? 'None' : 'Lax', // cross-site i prod
-    maxAge: 8 * 60 * 60 * 1000,      // 8 timmar
-    path: '/',                        // cookie skickas på alla endpoints
-    domain: isProd ? '.up.railway.app' : undefined, // ⚠️ viktig för cross-site
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? 'None' : 'Lax',
+    maxAge: 8 * 60 * 60 * 1000,
+    path: '/',
+    domain: isProd ? '.up.railway.app' : undefined,
   };
 
-  console.log('🍪 Sätter cookies med inställningar:', cookieOptions);
-
   res.cookie('token', token, cookieOptions);
-
-  if (participant_id != null) {
-    res.cookie('participant_id', participant_id, cookieOptions);
-  }
 };
 
 // 🟢 LOGIN
@@ -60,27 +52,22 @@ const loginUser = async (req, res) => {
 
     const user = await userModel.getUserByEmail(email);
     if (!user) {
-      await loginAttemptModel.logLoginAttempt(email, false);
       return res.status(401).json({ error: 'Felaktig e-post eller lösenord' });
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
-      await loginAttemptModel.logLoginAttempt(email, false);
       return res.status(401).json({ error: 'Felaktig e-post eller lösenord' });
     }
 
-    await loginAttemptModel.logLoginAttempt(email, true);
-
     const token = createToken(user);
-    setAuthCookies(res, token, user.participant_id || null);
+    setAuthCookies(res, token);
 
     return res.json({
       message: 'Inloggning lyckades!',
       username: user.username,
       role: user.role,
       admin: user.admin || false,
-      participant_id: user.participant_id || null,
     });
   } catch (err) {
     console.error('❌ Fel vid inloggning:', err);
@@ -91,15 +78,14 @@ const loginUser = async (req, res) => {
 // 🟢 REGISTER
 const registerUser = async (req, res) => {
   try {
-    const { email, username, password, role, personalNumber } = req.body;
+    const { email, username, password, role } = req.body;
 
     if (!email || !username || !password)
       return res.status(400).json({ error: 'Email, användarnamn och lösenord krävs' });
 
-    // 🧩 Valideringar
+    // Valideringar
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email))
-      return res.status(400).json({ error: 'Ogiltig e-postadress' });
+    if (!emailRegex.test(email)) return res.status(400).json({ error: 'Ogiltig e-postadress' });
 
     const usernameRegex = /^[a-zA-Z0-9]{3,}$/;
     if (!usernameRegex.test(username))
@@ -119,32 +105,20 @@ const registerUser = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const newUserData = {
+    const newUser = await userModel.createUser({
       email,
       username,
       hashedPassword,
       role: role || 'user',
-    };
-
-    if (role === 'deltagare' && personalNumber)
-      newUserData.personalNumber = personalNumber;
-
-    const newUser = await userModel.createUser(newUserData);
-
-    if (role === 'deltagare') {
-      const participantId = newUser.id;
-      await userModel.updateParticipantId(newUser.id, participantId);
-      newUser.participant_id = participantId;
-    }
+    });
 
     const token = createToken(newUser);
-    setAuthCookies(res, token, newUser.participant_id || null);
+    setAuthCookies(res, token);
 
     return res.status(201).json({
       message: 'Registrering lyckades',
       username: newUser.username,
       role: newUser.role,
-      participant_id: newUser.participant_id || null,
     });
   } catch (err) {
     console.error('❌ Fel vid registrering:', err);
@@ -164,7 +138,6 @@ const logoutUser = (req, res) => {
   };
 
   res.clearCookie('token', cookieOptions);
-  res.clearCookie('participant_id', cookieOptions);
   return res.json({ message: 'Utloggning lyckades' });
 };
 
