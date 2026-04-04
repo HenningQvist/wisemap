@@ -10,7 +10,7 @@ const fs = require('fs');
 const https = require('https');
 
 const authRoutes = require('./routes/authRoutes');
-const protectedRoutes = require('./routes/mainRoutes');
+const protectedRoutes = require('./routes/mainRouter');
 const applyMiddleware = require('./middlewares/middleware');
 
 // Ladda .env i utveckling
@@ -90,7 +90,7 @@ app.use("/favicon.ico", express.static(path.join(__dirname, "public", "favicon.i
 
 // ✅ API-routes
 app.use('/api/auth', authRoutes);
-app.use('/api', mainRoutes);
+app.use('/api', protectedRoutes);
 
 // ✅ Global felhantering
 app.use((err, req, res, next) => {
