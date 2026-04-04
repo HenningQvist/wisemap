@@ -29,17 +29,23 @@ const createToken = (user) => {
 
 // 🔐 Sätt cookies (FIXAD)
 const setAuthCookies = (req, res, token) => {
-  const isProd = process.env.NODE_ENV === 'production';
-
   const cookieOptions = {
     httpOnly: true,
-    secure: isProd,                 // ✅ krävs i production
-    sameSite: isProd ? 'None' : 'Lax', // ✅ cross-site support
-    maxAge: 8 * 60 * 60 * 1000,     // 8 timmar
+    secure: true,         // 🔥 KRITISKT
+    sameSite: 'None',     // 🔥 KRITISKT
+    maxAge: 8 * 60 * 60 * 1000,
     path: '/',
-    // ❌ INGEN domain (viktigt!)
   };
 
+  console.log('🍪 Sätter cookie:', cookieOptions);
+
+  res.cookie('token', token, cookieOptions);
+};
+
+  console.log('🍪 Sätter cookie:', cookieOptions);
+
+  res.cookie('token', token, cookieOptions);
+};
   console.log('🍪 Sätter cookies med inställningar:', cookieOptions);
 
   res.cookie('token', token, cookieOptions);

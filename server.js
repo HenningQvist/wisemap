@@ -6,114 +6,71 @@ const cors = require('cors');
 const helmet = require('helmet');
 const cookieParser = require('cookie-parser');
 const path = require('path');
-const fs = require('fs');
-const https = require('https');
 
 const authRoutes = require('./routes/authRoutes');
 const protectedRoutes = require('./routes/mainRouter');
 const applyMiddleware = require('./middlewares/middleware');
 
-// Ladda .env i utveckling
+// 🌱 ENV
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
-  console.log('🌱 Miljövariabler laddade från .env');
 }
-
-// Kontrollera obligatoriska miljövariabler
-const requiredVars = ['DB_USER', 'DB_PASS', 'DB_HOST', 'DB_NAME', 'JWT_SECRET'];
-requiredVars.forEach((v) => {
-  if (!process.env[v]) {
-    console.error(`❌ Saknad miljövariabel: ${v}`);
-    process.exit(1);
-  }
-});
 
 const app = express();
 
-// ✅ Trust proxy i produktion (om du kör bakom Railway reverse proxy)
-if (process.env.NODE_ENV === 'production') {
-  app.set('trust proxy', 1);
-}
+// 🔥 Railway fix
+app.set('trust proxy', 1);
 
-// ✅ Säkerhet & logg
+// 🛡️ Security & logging
 app.use(helmet());
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-if (process.env.NODE_ENV !== 'production') {
-  app.use(morgan('dev'));
-} else {
-  app.use(morgan('combined'));
-}
-
-// ✅ CORS-konfiguration för cookies
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
-  .split(',')
-  .map(o => o.trim())
-  .filter(Boolean);
-
+// 🔥 CORS – SIMPEL OCH KORREKT
 app.use(cors({
-  origin: function(origin, callback) {
-    // Postman eller server-till-server requests kan ha undefined origin
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      return callback(new Error('CORS-förfrågan blockerad av servern.'));
-    }
-  },
-  credentials: true, // 🔑 tillåter cookies
-  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-}));
-
-// ✅ Hantera preflight korrekt med credentials
-app.options('*', cors({
-  origin: allowedOrigins,
+  origin: 'https://wisemap.netlify.app',
   credentials: true,
-  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
-// ✅ JSON, cookies
+// 🔥 EXTRA (tvingar headers – fixar edge cases)
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://wisemap.netlify.app');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+});
+
+// 🔍 DEBUG (kan tas bort senare)
+app.use((req, res, next) => {
+  console.log('🌍 Origin:', req.headers.origin);
+  console.log('🍪 Incoming cookies:', req.headers.cookie);
+  next();
+});
+
+// 📦 Body & cookies
 app.use(express.json());
 app.use(cookieParser());
 
-// ✅ Passport init
+// 🔐 Passport
 require('./config/passport')(passport);
 app.use(passport.initialize());
 
-// ✅ Anpassad middleware
+// ⚙️ Middleware
 applyMiddleware(app);
 
-// ✅ Statisk filhantering
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use("/favicon.ico", express.static(path.join(__dirname, "public", "favicon.ico")));
+// 📁 Static
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ✅ API-routes
+// 🚀 Routes
 app.use('/api/auth', authRoutes);
 app.use('/api', protectedRoutes);
 
-// ✅ Global felhantering
+// ❌ Error handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: err.message || 'Något gick fel!' });
+  console.error('🔥 ERROR:', err.message);
+  res.status(500).json({ error: err.message || 'Serverfel' });
 });
 
-// ✅ Starta server
+// 🚀 Start
 const PORT = process.env.PORT || 5000;
-
-if (process.env.NODE_ENV !== 'production') {
-  // Lokalt HTTPS
-  const httpsOptions = {
-    key: fs.readFileSync(process.env.SSL_KEY_FILE || 'localhost-key.pem'),
-    cert: fs.readFileSync(process.env.SSL_CRT_FILE || 'localhost.pem')
-  };
-
-  https.createServer(httpsOptions, app).listen(PORT, () => {
-    console.log(`🚀 HTTPS-servern körs lokalt på https://localhost:${PORT}`);
-  });
-} else {
-  // Produktion (Railway hanterar HTTPS via proxy)
-  app.listen(PORT, () => {
-    console.log(`🚀 Servern körs i produktion på port ${PORT}`);
-  });
-}
+app.listen(PORT, () => {
+  console.log(`🚀 Server körs på port ${PORT}`);
+});
