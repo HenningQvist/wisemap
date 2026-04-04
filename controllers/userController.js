@@ -32,12 +32,14 @@ const setAuthCookies = (res, token) => {
   const isProd = process.env.NODE_ENV === 'production';
   const cookieOptions = {
     httpOnly: true,
-    secure: isProd,
+    secure: isProd,           // ✅ HTTPS i produktion
     sameSite: isProd ? 'None' : 'Lax',
     maxAge: 8 * 60 * 60 * 1000,
     path: '/',
-    domain: isProd ? '.up.railway.app' : undefined,
+    domain: isProd ? '.up.railway.app' : undefined, // ⭐ viktigt för cross-site
   };
+
+  console.log('🍪 Sätter cookies med inställningar:', cookieOptions);
 
   res.cookie('token', token, cookieOptions);
 };
