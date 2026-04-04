@@ -7,12 +7,13 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const cors = require('cors');
 
 const authRoutes = require('./routes/authRoutes');
-const protectedRoutes = require('./routes/mainRouter'); // bytte namn för tydlighet
+const protectedRoutes = require('./routes/mainRouter'); // Skyddade routes
 const applyMiddleware = require('./middlewares/middleware');
 
-// Ladda .env lokalt
+// Ladda .env
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
   console.log('🌱 Miljövariabler laddade från .env');
@@ -40,39 +41,15 @@ if (process.env.NODE_ENV === 'production') {
 app.use(helmet());
 app.use(process.env.NODE_ENV !== 'production' ? morgan('dev') : morgan('combined'));
 
-// 🔍 GLOBAL REQUEST LOGGER
-app.use((req, res, next) => {
-  console.log('\n==============================');
-  console.log(`➡️ ${req.method} ${req.originalUrl}`);
-  console.log('🌍 Origin:', req.headers.origin);
-  console.log('==============================');
-  next();
-});
-
-// 🔥 HÅRDKODAD CORS
+// 🔥 CORS (alla routes)
 const FRONTEND_URL = 'https://wisemap.netlify.app';
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
-  if (origin === FRONTEND_URL) {
-    res.setHeader('Access-Control-Allow-Origin', FRONTEND_URL);
-  }
-
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Origin, X-Requested-With, Content-Type, Accept, Authorization'
-  );
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.setHeader('Vary', 'Origin');
-
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-
-  next();
-});
+app.use(cors({
+  origin: FRONTEND_URL,
+  credentials: true, // cookies / auth
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Origin','X-Requested-With','Content-Type','Accept','Authorization']
+}));
 
 // JSON & cookies
 app.use(express.json());
