@@ -116,12 +116,12 @@ const registerUser = async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    const newUserData = {
-      email,
-      username,
-      password: hashedPassword,
-      role: role || 'user',
-    };
+const newUserData = {
+  email,
+  username,
+  hashedPassword,
+  role: role || 'user',
+};
 
     if (role === 'deltagare' && personalNumber)
       newUserData.personalNumber = personalNumber;
