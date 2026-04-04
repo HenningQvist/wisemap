@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const dotenv = require('dotenv');
 const passport = require('passport');
@@ -10,7 +9,7 @@ const fs = require('fs');
 const https = require('https');
 
 const authRoutes = require('./routes/authRoutes');
-const protectedRoutes = require('./routes/protectedRoutes');
+const protectedRoutes = require('./routes/mainRouter'); // bytte namn för tydlighet
 const applyMiddleware = require('./middlewares/middleware');
 
 // Ladda .env lokalt
@@ -20,7 +19,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 // Kontrollera obligatoriska miljövariabler
-const requiredVars = ['DB_USER', 'DB_PASS', 'DB_HOST', 'DB_NAME', 'JWT_SECRET', 'ALLOWED_ORIGINS'];
+const requiredVars = ['DB_USER', 'DB_PASS', 'DB_HOST', 'DB_NAME', 'JWT_SECRET'];
 requiredVars.forEach(v => {
   if (!process.env[v]) {
     console.error(`❌ Saknad miljövariabel: ${v}`);
@@ -41,58 +40,34 @@ if (process.env.NODE_ENV === 'production') {
 app.use(helmet());
 app.use(process.env.NODE_ENV !== 'production' ? morgan('dev') : morgan('combined'));
 
-
-// 🔍 GLOBAL REQUEST LOGGER (SUPER VIKTIG)
+// 🔍 GLOBAL REQUEST LOGGER
 app.use((req, res, next) => {
   console.log('\n==============================');
   console.log(`➡️ ${req.method} ${req.originalUrl}`);
   console.log('🌍 Origin:', req.headers.origin);
-  console.log('🧠 Headers:', req.headers);
   console.log('==============================');
   next();
 });
 
-
-// 🔥 HÅRDKODAD CORS (DEBUG / PRODUKTION SAFE)
+// 🔥 HÅRDKODAD CORS
 const FRONTEND_URL = 'https://wisemap.netlify.app';
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
 
-  console.log('\n🌐 CORS CHECK');
-  console.log('➡️ Request origin:', origin);
-
-  // Tillåt endast din frontend
   if (origin === FRONTEND_URL) {
-    console.log('✅ Origin tillåten');
     res.setHeader('Access-Control-Allow-Origin', FRONTEND_URL);
-  } else if (origin) {
-    console.log('❌ Origin blockerad:', origin);
-  } else {
-    console.log('ℹ️ Ingen origin (server-to-server request)');
   }
 
-  // Viktigt för cookies / auth
   res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-  // Headers som tillåts
   res.setHeader(
     'Access-Control-Allow-Headers',
     'Origin, X-Requested-With, Content-Type, Accept, Authorization'
   );
-
-  // Metoder som tillåts
-  res.setHeader(
-    'Access-Control-Allow-Methods',
-    'GET, POST, PUT, DELETE, OPTIONS'
-  );
-
-  // 🔥 Viktigt för caching/CDN
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Vary', 'Origin');
 
-  // Hantera preflight requests
   if (req.method === 'OPTIONS') {
-    console.log('⚡ Preflight request → 200 OK');
     return res.sendStatus(200);
   }
 
@@ -110,35 +85,24 @@ app.use(passport.initialize());
 // Middleware
 applyMiddleware(app);
 
-// Static
+// Static filer
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/favicon.ico", express.static(path.join(__dirname, "public", "favicon.ico")));
 
-
-// 🔍 TEST ROUTE (för att isolera CORS)
+// 🔍 TEST ROUTE
 app.get('/api/test', (req, res) => {
-  console.log('✅ TEST ROUTE TRÄFFAD');
   res.json({ success: true });
 });
 
-
-// 🔍 LOGGA ATT ROUTES LADDAS
-console.log('📦 Laddar /api/auth routes...');
-app.use('/api/auth', (req, res, next) => {
-  console.log('➡️ /api/auth route nådd');
-  next();
-}, authRoutes);
-
-console.log('📦 Laddar /api routes...');
+// 🔍 Routes
+app.use('/api/auth', authRoutes);
 app.use('/api', protectedRoutes);
-
 
 // Global felhantering
 app.use((err, req, res, next) => {
   console.error('💥 GLOBAL ERROR:', err.stack);
   res.status(500).json({ error: err.message || 'Något gick fel!' });
 });
-
 
 // Start server
 const PORT = process.env.PORT || 5000;
