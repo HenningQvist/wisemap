@@ -30,14 +30,21 @@ const createToken = (user) => {
 // 🔐 Sätt cookies korrekt
 const setAuthCookies = (res, token) => {
   const isProd = process.env.NODE_ENV === 'production';
+  const setAuthCookies = (req, res, token) => {
+  const isProd = process.env.NODE_ENV === 'production';
+
   const cookieOptions = {
     httpOnly: true,
-    secure: isProd,           // ✅ HTTPS i produktion
-    sameSite: isProd ? 'None' : 'Lax',
+    secure: isProd,               // HTTPS i produktion
+    sameSite: isProd ? 'None' : 'Lax', 
     maxAge: 8 * 60 * 60 * 1000,
     path: '/',
-    domain: isProd ? '.up.railway.app' : undefined, // ⭐ viktigt för cross-site
+    domain: isProd ? req.hostname : undefined, // <- Dynamisk domain
   };
+
+  console.log('🍪 Sätter cookies med inställningar:', cookieOptions);
+  res.cookie('token', token, cookieOptions);
+};
 
   console.log('🍪 Sätter cookies med inställningar:', cookieOptions);
 
