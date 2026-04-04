@@ -27,17 +27,17 @@ const createToken = (user) => {
   );
 };
 
-// 🔐 Sätt cookies korrekt
+// 🔐 Sätt cookies (FIXAD)
 const setAuthCookies = (req, res, token) => {
   const isProd = process.env.NODE_ENV === 'production';
 
   const cookieOptions = {
     httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? 'None' : 'Lax',
-    maxAge: 8 * 60 * 60 * 1000,
+    secure: isProd,                 // ✅ krävs i production
+    sameSite: isProd ? 'None' : 'Lax', // ✅ cross-site support
+    maxAge: 8 * 60 * 60 * 1000,     // 8 timmar
     path: '/',
-    // ❌ TA BORT domain helt (viktigt!)
+    // ❌ INGEN domain (viktigt!)
   };
 
   console.log('🍪 Sätter cookies med inställningar:', cookieOptions);
@@ -45,7 +45,6 @@ const setAuthCookies = (req, res, token) => {
   res.cookie('token', token, cookieOptions);
 };
 
- 
 // 🟢 LOGIN
 const loginUser = async (req, res) => {
   try {
@@ -55,17 +54,17 @@ const loginUser = async (req, res) => {
       return res.status(400).json({ error: 'Email och lösenord krävs' });
 
     const user = await userModel.getUserByEmail(email);
-    if (!user) {
+    if (!user)
       return res.status(401).json({ error: 'Felaktig e-post eller lösenord' });
-    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
+    if (!isMatch)
       return res.status(401).json({ error: 'Felaktig e-post eller lösenord' });
-    }
 
     const token = createToken(user);
-    setAuthCookies(res, token);
+
+    // ⭐ FIX: skicka med req!
+    setAuthCookies(req, res, token);
 
     return res.json({
       message: 'Inloggning lyckades!',
@@ -89,23 +88,29 @@ const registerUser = async (req, res) => {
 
     // Valideringar
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) return res.status(400).json({ error: 'Ogiltig e-postadress' });
+    if (!emailRegex.test(email))
+      return res.status(400).json({ error: 'Ogiltig e-postadress' });
 
     const usernameRegex = /^[a-zA-Z0-9]{3,}$/;
     if (!usernameRegex.test(username))
-      return res.status(400).json({ error: 'Ogiltigt användarnamn (minst 3 tecken, inga specialtecken)' });
+      return res.status(400).json({
+        error: 'Ogiltigt användarnamn (minst 3 tecken, inga specialtecken)',
+      });
 
     const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
     if (!passwordRegex.test(password))
       return res.status(400).json({
-        error: 'Lösenordet måste innehålla minst 8 tecken, en stor bokstav, en siffra och ett specialtecken',
+        error:
+          'Lösenordet måste innehålla minst 8 tecken, en stor bokstav, en siffra och ett specialtecken',
       });
 
     const existingUserByUsername = await userModel.getUserByUsername(username);
     const existingUserByEmail = await userModel.getUserByEmail(email);
 
     if (existingUserByUsername || existingUserByEmail)
-      return res.status(409).json({ error: 'Användarnamnet eller e-posten är redan registrerad' });
+      return res.status(409).json({
+        error: 'Användarnamnet eller e-posten är redan registrerad',
+      });
 
     const hashedPassword = await bcrypt.hash(password, 12);
 
@@ -117,7 +122,9 @@ const registerUser = async (req, res) => {
     });
 
     const token = createToken(newUser);
-    setAuthCookies(res, token);
+
+    // ⭐ FIX: skicka med req!
+    setAuthCookies(req, res, token);
 
     return res.status(201).json({
       message: 'Registrering lyckades',
@@ -133,15 +140,17 @@ const registerUser = async (req, res) => {
 // 🟡 LOGOUT
 const logoutUser = (req, res) => {
   const isProd = process.env.NODE_ENV === 'production';
+
   const cookieOptions = {
-    path: '/',
-    domain: isProd ? '.up.railway.app' : undefined,
     httpOnly: true,
     secure: isProd,
     sameSite: isProd ? 'None' : 'Lax',
+    path: '/',
+    // ❌ ingen domain här heller
   };
 
   res.clearCookie('token', cookieOptions);
+
   return res.json({ message: 'Utloggning lyckades' });
 };
 
