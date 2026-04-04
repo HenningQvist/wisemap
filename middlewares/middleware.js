@@ -14,6 +14,7 @@ const sanitizeUrl = (req, res, next) => {
 const attachUser = (req, res, next) => {
   const token =
     req.cookies?.token ||
+    req.headers['x-access-token'] ||
     req.headers['authorization'];
 
   if (!token) return next();
@@ -32,43 +33,45 @@ const attachUser = (req, res, next) => {
       admin: payload.admin,
     };
   } catch (err) {
+    // Endast fel, ingen spam
     console.warn('Ogiltig JWT:', err.message);
   }
 
   next();
 };
 
-// Felhantering
+// Felhanterings-middleware
 const errorHandler = (err, req, res, next) => {
-  console.error('🔥 ERROR:', err.message);
+  if (process.env.NODE_ENV !== 'production') {
+    console.error('Error:', err.message);
+  }
   res.status(500).json({ message: 'Internt serverfel' });
 };
 
 module.exports = (app) => {
-  // 🔥 HÅRDKODA (för att eliminera env-buggar)
-  const allowedOrigins = [
-    'https://wisemap.netlify.app'
-  ];
+  const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
 
-  app.use(cors({
-    origin: function (origin, callback) {
-      console.log("🌍 Origin:", origin);
+  // Endast varning vid dramatisk misskonfiguration
+  if (allowedOrigins.length === 0) {
+    console.warn('Ingen ALLOWED_ORIGINS satt — CORS kan blockera alla requests.');
+  }
 
+  const corsOptions = {
+    origin: function(origin, callback) {
       if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-
-      console.log("❌ BLOCKED:", origin);
-      return callback(new Error('CORS blockerad'));
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error('CORS-förfrågan blockerad.'));
     },
     credentials: true,
-  }));
+    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
+  };
 
-  // ❌ TA BORT DENNA RAD HELT
-  // app.options('*', cors(corsOptions));
-
+  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions));
   app.use(express.json());
   app.use(passport.initialize());
   app.use(sanitizeUrl);
