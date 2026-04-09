@@ -78,6 +78,7 @@ const loginUser = async (req, res) => {
       role: user.role,
       admin: user.admin || false,
       participant_id: user.participant_id || null,
+      token: token, // Add token to response
     });
   } catch (err) {
     console.error('❌ Fel vid inloggning:', err);
