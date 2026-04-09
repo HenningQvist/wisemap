@@ -7,6 +7,7 @@ const cookieParser = require("cookie-parser");
 const loginRouter = require("./loginRouter");
 const overpassRouter = require("./overpass");
 const companiesRouter = require("./companyRoutes");
+const jobAdsRouter = require("./jobAdsRouter"); 
 
 // Middleware för rollkontroll
 const requireRoles = require("../middlewares/roleMiddleware");
@@ -43,6 +44,12 @@ router.use(
   '/companies',
   requireRoles({ roles: ['admin', 'handläggare'] }),
   companiesRouter
+);
+
+router.use(
+  '/jobsearch',
+  requireRoles({ roles: ['admin', 'handläggare'] }), 
+  jobAdsRouter
 );
 
 module.exports = router;

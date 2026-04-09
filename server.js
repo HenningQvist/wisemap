@@ -8,7 +8,7 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
-const rateLimit = require('express-rate-limit'); // ✅ NY
+const rateLimit = require('express-rate-limit'); 
 
 const authRoutes = require('./routes/authRoutes');
 const protectedRoutes = require('./routes/mainRouter');
