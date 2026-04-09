@@ -7,21 +7,18 @@ const cookieParser = require("cookie-parser");
 const loginRouter = require("./loginRouter");
 const overpassRouter = require("./overpass");
 const companiesRouter = require("./companyRoutes");
-const jobAdsRouter = require("./jobAdsRouter"); 
+const jobAdsRouter = require("./jobAdsRouter");
 
 // Middleware för rollkontroll
 const requireRoles = require("../middlewares/roleMiddleware");
 
 const router = express.Router();
 
-// ==============================
-// 🔐 GLOBAL AUTH
-// ==============================
-router.use(cookieParser());
-router.use(passport.authenticate('jwt', { session: false }));
+// Hårdkodad frontend URL för CORS
+const FRONTEND_URL = "https://wisemap.netlify.app";
 
 // ==============================
-// 🎯 LOGIN (måste ligga utanför rollstyrning)
+// 🎯 LOGIN (utanför auth)
 // ==============================
 router.use('/auth', loginRouter);
 
@@ -29,26 +26,56 @@ router.use('/auth', loginRouter);
 // 🔐 SKYDDADE ROUTER
 // ==============================
 
-// Enkel testroute
-router.get('/protected', (req, res) => {
-  res.json({ message: 'Skyddad resurs', user: req.user });
+// TEMP: Öppen testroute utan auth
+router.get("/test-open", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", FRONTEND_URL);
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.json({ message: "Öppen route fungerar! CORS OK" });
 });
 
+// Skyddad route med JWT
+router.get(
+  "/protected",
+  passport.authenticate("jwt", { session: false, failWithError: true }),
+  (req, res) => {
+    // Returnerar alltid CORS-header
+    res.setHeader("Access-Control-Allow-Origin", FRONTEND_URL);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+    res.json({ message: "Skyddad resurs", user: req.user });
+  },
+  (err, req, res, next) => {
+    // Auth misslyckades → returnera JSON + CORS
+    res.setHeader("Access-Control-Allow-Origin", FRONTEND_URL);
+    res.setHeader("Access-Control-Allow-Credentials", "true");
+
+    if (err) {
+      return res.status(401).json({ error: "Ogiltig token eller ingen token" });
+    }
+    next(err);
+  }
+);
+
+// Overpass-router (JWT + roller)
 router.use(
-  '/overpass',
-  requireRoles({ roles: ['admin', 'handläggare'] }),
+  "/overpass",
+  passport.authenticate("jwt", { session: false }),
+  requireRoles(["admin", "handläggare"]),
   overpassRouter
 );
 
+// Companies-router (JWT + roller)
 router.use(
-  '/companies',
-  requireRoles({ roles: ['admin', 'handläggare'] }),
+  "/companies",
+  passport.authenticate("jwt", { session: false }),
+  requireRoles(["user", "handläggare"]),
   companiesRouter
 );
 
+// JobAds-router (JWT + roller)
 router.use(
   '/jobsearch',
-  requireRoles({ roles: ['admin', 'handläggare'] }), 
+  passport.authenticate("jwt", { session: false }),
+  requireRoles(["admin", "handläggare"]),
   jobAdsRouter
 );
 
