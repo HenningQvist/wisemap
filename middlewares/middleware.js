@@ -3,6 +3,7 @@ const express = require('express');
 const passport = require('passport');
 const jwt = require('jsonwebtoken');
 const env = require('../config/env');
+const cookieParser = require('cookie-parser');
 
 // Sanera URL
 const sanitizeUrl = (req, res, next) => {
@@ -75,6 +76,7 @@ module.exports = (app) => {
   app.use(express.json());
   app.use(passport.initialize());
   app.use(sanitizeUrl);
+  app.use(cookieParser());
   app.use(attachUser);
   app.use(errorHandler);
 };
