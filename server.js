@@ -8,9 +8,10 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const fs = require('fs');
 const https = require('https');
+const rateLimit = require('express-rate-limit'); // ✅ NY
 
 const authRoutes = require('./routes/authRoutes');
-const protectedRoutes = require('./routes/protectedRoutes');
+const protectedRoutes = require('./routes/mainRouter');
 const applyMiddleware = require('./middlewares/middleware');
 
 // Ladda .env i utveckling
@@ -30,12 +31,39 @@ requiredVars.forEach((v) => {
 
 const app = express();
 
-// ✅ Trust proxy i produktion (om du kör bakom Railway reverse proxy)
+// ✅ Trust proxy (viktigt för rate limit i production)
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
-// ✅ Säkerhet & logg
+// ==========================
+// 🔒 RATE LIMITERS
+// ==========================
+
+// Global limiter (hela API)
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 min
+  max: 100, // max requests per IP
+  message: {
+    error: "För många requests, försök igen senare."
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// Striktare limiter för auth (login/register)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10, // bara 10 försök
+  message: {
+    error: "För många inloggningsförsök. Vänta 15 minuter."
+  }
+});
+
+// ==========================
+// 🛡️ Säkerhet & logg
+// ==========================
+
 app.use(helmet());
 
 if (process.env.NODE_ENV !== 'production') {
@@ -44,7 +72,10 @@ if (process.env.NODE_ENV !== 'production') {
   app.use(morgan('combined'));
 }
 
-// ✅ CORS-konfiguration för cookies
+// ==========================
+// 🌍 CORS
+// ==========================
+
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
   .map(o => o.trim())
@@ -52,7 +83,6 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
 
 app.use(cors({
   origin: function(origin, callback) {
-    // Postman eller server-till-server requests kan ha undefined origin
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) {
       return callback(null, true);
@@ -60,12 +90,11 @@ app.use(cors({
       return callback(new Error('CORS-förfrågan blockerad av servern.'));
     }
   },
-  credentials: true, // 🔑 tillåter cookies
+  credentials: true,
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
-// ✅ Hantera preflight korrekt med credentials
 app.options('*', cors({
   origin: allowedOrigins,
   credentials: true,
@@ -73,36 +102,71 @@ app.options('*', cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
-// ✅ JSON, cookies
-app.use(express.json());
+// ==========================
+// 📦 BODY + COOKIES
+// ==========================
+
+// 🔒 Limit på request size (skydd mot stora payloads)
+app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
 
-// ✅ Passport init
+// ==========================
+// 🔐 RATE LIMIT (PLACERING VIKTIG)
+// ==========================
+
+app.use(globalLimiter); // 👉 gäller allt under
+
+// ==========================
+// 🔑 PASSPORT
+// ==========================
+
 require('./config/passport')(passport);
 app.use(passport.initialize());
 
-// ✅ Anpassad middleware
+// ==========================
+// ⚙️ CUSTOM MIDDLEWARE
+// ==========================
+
 applyMiddleware(app);
 
-// ✅ Statisk filhantering
+// ==========================
+// 📁 STATIC FILES
+// ==========================
+
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 app.use("/favicon.ico", express.static(path.join(__dirname, "public", "favicon.ico")));
 
-// ✅ API-routes
-app.use('/api/auth', authRoutes);
+// ==========================
+// 🚀 ROUTES
+// ==========================
+
+// 🔐 extra skydd på auth (login brute force)
+app.use('/api/auth', authLimiter, authRoutes);
+
+// 🔒 resten av API
 app.use('/api', protectedRoutes);
 
-// ✅ Global felhantering
+// ==========================
+// ❌ ERROR HANDLER (SÄKRARE)
+// ==========================
+
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: err.message || 'Något gick fel!' });
+
+  if (process.env.NODE_ENV === 'production') {
+    res.status(500).json({ error: 'Internal server error' });
+  } else {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-// ✅ Starta server
+// ==========================
+// 🚀 START SERVER
+// ==========================
+
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== 'production') {
-  // Lokalt HTTPS
   const httpsOptions = {
     key: fs.readFileSync(process.env.SSL_KEY_FILE || 'localhost-key.pem'),
     cert: fs.readFileSync(process.env.SSL_CRT_FILE || 'localhost.pem')
@@ -112,7 +176,6 @@ if (process.env.NODE_ENV !== 'production') {
     console.log(`🚀 HTTPS-servern körs lokalt på https://localhost:${PORT}`);
   });
 } else {
-  // Produktion (Railway hanterar HTTPS via proxy)
   app.listen(PORT, () => {
     console.log(`🚀 Servern körs i produktion på port ${PORT}`);
   });
