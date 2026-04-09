@@ -7,13 +7,10 @@ dotenv.config();
 
 const options = {
   jwtFromRequest: ExtractJwt.fromExtractors([
+    ExtractJwt.fromAuthHeaderAsBearerToken(), // Check Authorization header first
     (req) => {
-      // Logga för att kontrollera om cookies finns på request
-      console.log('🔹 Alla cookies i request:', req.cookies);  // Logga alla cookies för att se om token finns
-      if (!req.cookies.token) {
-        console.log('⚠️ Ingen token hittades i cookies');
-      }
-      return req.cookies.token;  // Extrahera token från cookies
+      // Fallback to cookies for backward compatibility
+      return req.cookies.token;
     }
   ]),
   secretOrKey: process.env.JWT_SECRET,
