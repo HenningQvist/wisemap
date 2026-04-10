@@ -1,6 +1,8 @@
 const pool = require("../config/database");
 
-// Helper: normalisera kontakter
+// ==============================
+// HELPERS
+// ==============================
 const normalizeContacts = (contacts, username) => {
   if (!Array.isArray(contacts)) return [];
   return contacts.map(c => ({
@@ -11,20 +13,31 @@ const normalizeContacts = (contacts, username) => {
   }));
 };
 
-// GET alla företag
+// ==============================
+// GET ALL
+// ==============================
 const getAll = async () => {
-  const result = await pool.query("SELECT * FROM companies ORDER BY id ASC");
+  const result = await pool.query(
+    "SELECT * FROM companies ORDER BY id ASC"
+  );
   return result.rows;
 };
 
-// CREATE
-const create = async (body) => {
-  const safeContacts = JSON.stringify(normalizeContacts(body.contacts, body.createdBy));
+// ==============================
+// CREATE (🔥 FIXED UUID ISSUE)
+// ==============================
+const create = async (body, user) => {
+  const safeContacts = JSON.stringify(
+    normalizeContacts(body.contacts, user?.username)
+  );
 
   const result = await pool.query(
     `INSERT INTO companies
-     (name, description, contact, phone, status, type, lat, lon, contacts, matched,
-      need_start_date, need_end_date, totalSlots, filledSlots, created_by, updated_by)
+     (name, description, contact, phone, status, type,
+      lat, lon, contacts, matched,
+      need_start_date, need_end_date,
+      totalSlots, filledSlots,
+      created_by, updated_by)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
      RETURNING *`,
     [
@@ -42,19 +55,25 @@ const create = async (body) => {
       body.needEndDate || null,
       body.totalSlots || 0,
       body.filledSlots || 0,
-      body.createdBy || "Okänd",
-      body.updatedBy || "Okänd"
+
+      // 🔥 FIX: UUID ONLY (NO STRING)
+      user?.id,
+      user?.id
     ]
   );
 
   return result.rows[0];
 };
 
-// UPDATE (med UPSERT fallback)
-const update = async (id, body) => {
-  const safeContacts = JSON.stringify(normalizeContacts(body.contacts, body.updatedBy));
+// ==============================
+// UPDATE
+// ==============================
+const update = async (id, body, user) => {
+  const safeContacts = JSON.stringify(
+    normalizeContacts(body.contacts, user?.username)
+  );
 
-  const updateResult = await pool.query(
+  const result = await pool.query(
     `UPDATE companies
      SET name=$1, description=$2, contact=$3, phone=$4,
          status=$5, type=$6, lat=$7, lon=$8,
@@ -79,16 +98,20 @@ const update = async (id, body) => {
       body.needEndDate || null,
       body.totalSlots || 0,
       body.filledSlots || 0,
-      body.updatedBy || "Okänd",
+
+      // 🔥 FIX
+      user?.id,
+
       id
     ]
   );
 
-  if (updateResult.rows.length) return updateResult.rows[0];
-  return await create(body); // UPSERT fallback
+  return result.rows[0];
 };
 
+// ==============================
 // DELETE
+// ==============================
 const remove = async (id) => {
   const result = await pool.query(
     "DELETE FROM companies WHERE id=$1 RETURNING *",
@@ -100,8 +123,7 @@ const remove = async (id) => {
 // ==============================
 // ANALYSIS
 // ==============================
-// Lägg till analys
-const addAnalysis = async (id, body) => {
+const addAnalysis = async (id, body, user) => {
   const companyResult = await pool.query(
     "SELECT analysis FROM companies WHERE id=$1",
     [id]
@@ -116,10 +138,12 @@ const addAnalysis = async (id, body) => {
     title: body.title,
     description: body.description || "",
     data: body.analysis,
-    requireLicense: body.requireLicense || false, // ✅ alltid med
+    requireLicense: body.requireLicense || false,
     createdAt: new Date().toISOString(),
-    createdBy: body.createdBy || "Okänd",
-    updatedBy: body.updatedBy || "Okänd",
+
+    // 🔥 FIX UUID SAFE
+    createdBy: user?.id,
+    updatedBy: user?.id,
   };
 
   const updated = [...current, newAnalysis];
@@ -131,28 +155,28 @@ const addAnalysis = async (id, body) => {
 
   return result.rows[0];
 };
+
+// ==============================
+// GET ANALYSES
+// ==============================
 const getAllAnalyses = async () => {
   const result = await pool.query(
     "SELECT id, name, analysis FROM companies ORDER BY id ASC"
   );
 
   return result.rows.flatMap(c => {
-    if (!c.analysis) return []; // null → tom array
+    if (!c.analysis) return [];
 
-    // Om analysen är JSON-sträng → parse
-    let analyses;
-    if (typeof c.analysis === "string") {
+    let analyses = c.analysis;
+
+    if (typeof analyses === "string") {
       try {
-        analyses = JSON.parse(c.analysis);
-      } catch (err) {
-        console.error("JSON parse error for companyId", c.id, err);
+        analyses = JSON.parse(analyses);
+      } catch {
         analyses = [];
       }
-    } else {
-      analyses = c.analysis;
     }
 
-    // säkerställ array
     if (!Array.isArray(analyses)) analyses = [analyses];
 
     return analyses.map(a => ({
@@ -169,17 +193,30 @@ const getCompanyAnalyses = async (id) => {
     "SELECT analysis FROM companies WHERE id=$1",
     [id]
   );
-  const row = result.rows[0];
-  if (!row) return []; // alltid array
 
-  const analyses = row.analysis || [];
-  return (Array.isArray(analyses) ? analyses : [analyses]).map(a => ({
+  const row = result.rows[0];
+  if (!row) return [];
+
+  let analyses = row.analysis || [];
+  if (typeof analyses === "string") {
+    try {
+      analyses = JSON.parse(analyses);
+    } catch {
+      analyses = [];
+    }
+  }
+
+  if (!Array.isArray(analyses)) analyses = [analyses];
+
+  return analyses.map(a => ({
     ...a,
-    requireLicense: a.requireLicense || false, // ✅ säkerställ alltid
+    requireLicense: a.requireLicense || false
   }));
 };
 
-// Ta bort analys
+// ==============================
+// REMOVE ANALYSIS
+// ==============================
 const removeAnalysis = async (companyId, index) => {
   const companyResult = await pool.query(
     "SELECT analysis FROM companies WHERE id=$1",
@@ -193,7 +230,7 @@ const removeAnalysis = async (companyId, index) => {
 
   if (index < 0 || index >= analyses.length) return null;
 
-  analyses.splice(index, 1); // ta bort analysen
+  analyses.splice(index, 1);
 
   const result = await pool.query(
     "UPDATE companies SET analysis=$1 WHERE id=$2 RETURNING *",
@@ -203,11 +240,9 @@ const removeAnalysis = async (companyId, index) => {
   return result.rows[0];
 };
 
-module.exports = {
-  ...module.exports,
-  removeAnalysis
-};
-
+// ==============================
+// EXPORT (CLEAN - NO DUPLICATES)
+// ==============================
 module.exports = {
   getAll,
   create,
