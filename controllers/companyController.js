@@ -1,33 +1,52 @@
 const model = require("../models/companyModel");
 
-// GET
+// =====================
+// GET ALL COMPANIES
+// =====================
 exports.getAll = async (req, res) => {
   try {
-    res.json(await model.getAll());
+    const companies = await model.getAll();
+    res.json(companies);
   } catch (err) {
+    console.error("getAll ERROR:", err);
     res.status(500).json({ error: "Kunde inte hämta företag" });
   }
 };
 
-// POST
+// =====================
+// CREATE COMPANY
+// =====================
 exports.create = async (req, res) => {
   try {
-    res.json(await model.create(req.body));
+    const result = await model.create(req.body);
+    res.json(result);
   } catch (err) {
+    console.error("create ERROR:", err);
     res.status(500).json({ error: "Kunde inte skapa företag" });
   }
 };
 
-// PUT
+// =====================
+// UPDATE COMPANY
+// =====================
 exports.update = async (req, res) => {
   try {
-    res.json(await model.update(req.params.id, req.body));
+    const result = await model.update(req.params.id, req.body);
+
+    if (!result) {
+      return res.status(404).json({ error: "Företag hittades inte" });
+    }
+
+    res.json(result);
   } catch (err) {
+    console.error("update ERROR:", err);
     res.status(500).json({ error: "Kunde inte uppdatera företag" });
   }
 };
 
-// DELETE
+// =====================
+// DELETE COMPANY
+// =====================
 exports.remove = async (req, res) => {
   try {
     const deleted = await model.remove(req.params.id);
@@ -38,11 +57,15 @@ exports.remove = async (req, res) => {
 
     res.json({ success: true, deleted });
   } catch (err) {
+    console.error("remove ERROR:", err);
     res.status(500).json({ error: "Kunde inte ta bort företag" });
   }
 };
 
-// ANALYSIS
+// =====================================================
+// ANALYSIS - FIX: UUID FROM JWT (NOT FRONTEND STRING!)
+// =====================================================
+
 // Lägg till analys
 exports.addAnalysis = async (req, res) => {
   const { title, analysis, requireLicense } = req.body;
@@ -56,9 +79,11 @@ exports.addAnalysis = async (req, res) => {
       title,
       description: req.body.description || "",
       analysis,
-      requireLicense: requireLicense || false, // ✅ default false
-      createdBy: req.body.createdBy || "Okänd",
-      updatedBy: req.body.updatedBy || "Okänd",
+      requireLicense: requireLicense || false,
+
+      // 🔥 FIX: alltid från JWT (UUID)
+      createdBy: req.user?.id,
+      updatedBy: req.user?.id,
     });
 
     if (!result) {
@@ -72,33 +97,40 @@ exports.addAnalysis = async (req, res) => {
   }
 };
 
+// =====================
+// GET ALL ANALYSES
+// =====================
 exports.getAllAnalyses = async (req, res) => {
   try {
     const all = await model.getAllAnalyses();
-    res.json(all); // kan vara tom array
+    res.json(all || []);
   } catch (err) {
     console.error("getAllAnalyses ERROR:", err);
     res.status(500).json({ error: "Kunde inte hämta analyser" });
   }
 };
 
-// Hämta analyser för ett företag
+// =====================
+// GET COMPANY ANALYSES
+// =====================
 exports.getCompanyAnalyses = async (req, res) => {
   try {
     const analyses = await model.getCompanyAnalyses(req.params.id);
-    res.json(analyses); // ✅ returnerar alltid array
+    res.json(analyses || []);
   } catch (err) {
     console.error("getCompanyAnalyses ERROR:", err);
     res.status(500).json({ error: "Kunde inte hämta analyser" });
   }
 };
 
-// Ta bort analys
+// =====================
+// DELETE ANALYSIS
+// =====================
 exports.removeAnalysis = async (req, res) => {
   const companyId = req.params.id;
-  const index = parseInt(req.params.analysisIndex);
+  const index = Number(req.params.analysisIndex);
 
-  if (!companyId || isNaN(index)) {
+  if (!companyId || Number.isNaN(index)) {
     return res.status(400).json({ error: "Företags-ID och index krävs" });
   }
 
