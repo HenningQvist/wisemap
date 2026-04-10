@@ -1,19 +1,18 @@
-// controllers/authController.js
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const userModel = require('../models/userModel');
 
-// 🛡️ RATE LIMITER för login
+// 🛡️ LOGIN RATE LIMIT
 const loginRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
-  message: 'För många inloggningsförsök. Försök igen om 15 minuter.',
-  keyGenerator: (req) => req.ip + ':' + req.body.email,
+  message: 'För många inloggningsförsök. Försök igen senare.',
+  keyGenerator: (req) => req.ip + ':' + (req.body.email || ''),
   skipSuccessfulRequests: true,
 });
 
-// 🔐 Skapa JWT-token
+// 🔐 CREATE JWT
 const createToken = (user) => {
   return jwt.sign(
     {
@@ -27,22 +26,9 @@ const createToken = (user) => {
   );
 };
 
-// 🔐 Sätt cookies (FIXAD)
-const setAuthCookies = (req, res, token) => {
-  const cookieOptions = {
-    httpOnly: true,
-    secure: true,       // 🔥 krävs i production (HTTPS)
-    sameSite: 'None',   // 🔥 krävs för cross-site (Netlify → Railway)
-    maxAge: 8 * 60 * 60 * 1000,
-    path: '/',
-  };
-
-  console.log('🍪 Sätter cookie:', cookieOptions);
-
-  res.cookie('token', token, cookieOptions);
-};
-
-// 🟢 LOGIN
+// ==========================
+// 🟢 LOGIN (BEARER ONLY)
+// ==========================
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -65,24 +51,33 @@ const loginUser = async (req, res) => {
 
     const token = createToken(user);
 
-    setAuthCookies(req, res, token);
+    console.log('🔐 LOGIN OK:', {
+      user: user.username,
+      role: user.role,
+      hasToken: !!token,
+    });
 
     return res.json({
       message: 'Inloggning lyckades!',
-      username: user.username,
-      role: user.role,
-      admin: user.admin || false,
-      participant_id: user.participant_id || null,
-      token: token, // Add token to response
+      token, // 👈 VIKTIGT
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+        admin: user.admin || false,
+        participant_id: user.participant_id || null,
+      },
     });
 
   } catch (err) {
-    console.error('❌ Fel vid inloggning:', err);
+    console.error('❌ LOGIN ERROR:', err);
     return res.status(500).json({ error: 'Serverfel vid inloggning' });
   }
 };
 
+// ==========================
 // 🟢 REGISTER
+// ==========================
 const registerUser = async (req, res) => {
   try {
     const { email, username, password, role } = req.body;
@@ -91,46 +86,14 @@ const registerUser = async (req, res) => {
       return res.status(400).json({ error: 'Email, användarnamn och lösenord krävs' });
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ error: 'Ogiltig e-postadress' });
-    }
-
-    const usernameRegex = /^[a-zA-Z0-9]{3,}$/;
-    if (!usernameRegex.test(username)) {
-      return res.status(400).json({
-        error: 'Ogiltigt användarnamn (minst 3 tecken, inga specialtecken)',
-      });
-    }
-
-    const passwordRegex = /^(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&]).{8,}$/;
-    if (!passwordRegex.test(password)) {
-      return res.status(400).json({
-        error:
-          'Lösenordet måste innehålla minst 8 tecken, en stor bokstav, en siffra och ett specialtecken',
-      });
-    }
-
-    const existingUserByUsername = await userModel.getUserByUsername(username);
-    const existingUserByEmail = await userModel.getUserByEmail(email);
-
-    if (existingUserByUsername || existingUserByEmail) {
-      return res.status(409).json({
-        error: 'Användarnamnet eller e-posten är redan registrerad',
-      });
-    }
-
     const hashedPassword = await bcrypt.hash(password, 12);
 
-const newUserData = {
-  email,
-  username,
-  hashedPassword,
-  role: role || 'user',
-};
-
-    if (role === 'deltagare' && personalNumber)
-      newUserData.personalNumber = personalNumber;
+    const newUserData = {
+      email,
+      username,
+      hashedPassword,
+      role: role || 'user',
+    };
 
     const newUser = await userModel.createUser(newUserData);
 
@@ -142,30 +105,31 @@ const newUserData = {
 
     const token = createToken(newUser);
 
-    setAuthCookies(req, res, token);
+    console.log('🟢 REGISTER OK:', newUser.username);
 
     return res.status(201).json({
       message: 'Registrering lyckades',
-      username: newUser.username,
-      role: newUser.role,
+      token, // 👈 VIKTIGT
+      user: {
+        id: newUser.id,
+        username: newUser.username,
+        role: newUser.role,
+      },
     });
 
   } catch (err) {
-    console.error('❌ Fel vid registrering:', err);
+    console.error('❌ REGISTER ERROR:', err);
     return res.status(500).json({ error: 'Serverfel vid registrering' });
   }
 };
 
-// 🟡 LOGOUT
+// ==========================
+// 🔴 LOGOUT (CLIENT SIDE ONLY)
+// ==========================
 const logoutUser = (req, res) => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'None',
-    path: '/',
+  return res.json({
+    message: 'Utloggning lyckades (ta bort token i frontend)',
   });
-
-  return res.json({ message: 'Utloggning lyckades' });
 };
 
 module.exports = {

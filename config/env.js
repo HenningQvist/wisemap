@@ -38,8 +38,8 @@ module.exports = {
   SSL_KEY_FILE: getEnv('SSL_KEY_FILE'),
 
   // Frontend & API
-  FRONTEND_URL: getEnv('FRONTEND_URL', 'http://localhost:3000'),
-  ALLOWED_ORIGINS: getEnv('ALLOWED_ORIGINS', 'http://localhost:3000'),
+  FRONTEND_URL: getEnv('FRONTEND_URL', 'https://localhost:3000'),
+  ALLOWED_ORIGINS: getEnv('ALLOWED_ORIGINS', 'https://localhost:3000'),
   API_URL: getEnv('API_URL') || getEnv('VITE_API_URL'),
 
   // Databas
