@@ -14,13 +14,21 @@ const authRoutes = require('./routes/authRoutes');
 const protectedRoutes = require('./routes/mainRouter');
 const applyMiddleware = require('./middlewares/middleware');
 
-// Ladda .env i utveckling
+// ==========================
+// 🌱 ENV
+// ==========================
+
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
   console.log('🌱 Miljövariabler laddade från .env');
 }
 
-// Kontrollera obligatoriska miljövariabler
+console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
+
+// ==========================
+// ❗ REQUIRED ENV CHECK
+// ==========================
+
 const requiredVars = ['DB_USER', 'DB_PASS', 'DB_HOST', 'DB_NAME', 'JWT_SECRET'];
 requiredVars.forEach((v) => {
   if (!process.env[v]) {
@@ -29,39 +37,35 @@ requiredVars.forEach((v) => {
   }
 });
 
+// ==========================
+// 🚀 APP
+// ==========================
+
 const app = express();
 
-// ✅ Trust proxy (viktigt för rate limit i production)
+// Trust proxy (Railway behövs)
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
 // ==========================
-// 🔒 RATE LIMITERS
+// 🔒 RATE LIMIT
 // ==========================
 
-// Global limiter (hela API)
 const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 min
-  max: 100, // max requests per IP
-  message: {
-    error: "För många requests, försök igen senare."
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: "För många requests" },
 });
 
-// Striktare limiter för auth (login/register)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 10, // bara 10 försök
-  message: {
-    error: "För många inloggningsförsök. Vänta 15 minuter."
-  }
+  max: 10,
+  message: { error: "För många loginförsök" },
 });
 
 // ==========================
-// 🛡️ Säkerhet & logg
+// 🛡️ SECURITY & LOGGING
 // ==========================
 
 app.use(helmet());
@@ -81,40 +85,54 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .map(o => o.trim())
   .filter(Boolean);
 
+console.log('🌍 ALLOWED ORIGINS:', allowedOrigins);
+
 app.use(cors({
   origin: function(origin, callback) {
+    console.log('🌍 CORS request från:', origin);
+
     if (!origin) return callback(null, true);
+
     if (allowedOrigins.includes(origin)) {
+      console.log('✅ CORS tillåten');
       return callback(null, true);
     } else {
-      return callback(new Error('CORS-förfrågan blockerad av servern.'));
+      console.log('❌ CORS BLOCKERAD:', origin);
+      return callback(new Error('CORS blockerad'));
     }
   },
   credentials: true,
-  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
-}));
-
-app.options('*', cors({
-  origin: allowedOrigins,
-  credentials: true,
-  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
 }));
 
 // ==========================
 // 📦 BODY + COOKIES
 // ==========================
 
-// 🔒 Limit på request size (skydd mot stora payloads)
 app.use(express.json({ limit: "10kb" }));
 app.use(cookieParser());
 
 // ==========================
-// 🔐 RATE LIMIT (PLACERING VIKTIG)
+// 🔥 GLOBAL DEBUG LOGGER
 // ==========================
 
-app.use(globalLimiter); // 👉 gäller allt under
+app.use((req, res, next) => {
+  console.log('\n==============================');
+  console.log('📥 REQUEST');
+  console.log('➡️ Method:', req.method);
+  console.log('➡️ URL:', req.originalUrl);
+  console.log('➡️ Origin:', req.headers.origin);
+  console.log('➡️ Authorization:', req.headers.authorization || '❌ none');
+  console.log('➡️ Cookies:', req.cookies || '❌ none');
+  console.log('==============================\n');
+
+  next();
+});
+
+// ==========================
+// 🔐 RATE LIMIT GLOBAL
+// ==========================
+
+app.use(globalLimiter);
 
 // ==========================
 // 🔑 PASSPORT
@@ -130,34 +148,30 @@ app.use(passport.initialize());
 applyMiddleware(app);
 
 // ==========================
-// 📁 STATIC FILES
+// 📁 STATIC
 // ==========================
 
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-app.use("/favicon.ico", express.static(path.join(__dirname, "public", "favicon.ico")));
 
 // ==========================
 // 🚀 ROUTES
 // ==========================
 
-// 🔐 extra skydd på auth (login brute force)
 app.use('/api/auth', authLimiter, authRoutes);
-
-// 🔒 resten av API
 app.use('/api', protectedRoutes);
 
 // ==========================
-// ❌ ERROR HANDLER (SÄKRARE)
+// ❌ ERROR HANDLER
 // ==========================
 
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('💥 ERROR:', err.message);
 
-  if (process.env.NODE_ENV === 'production') {
-    res.status(500).json({ error: 'Internal server error' });
-  } else {
-    res.status(500).json({ error: err.message });
-  }
+  res.status(500).json({
+    error: process.env.NODE_ENV === 'production'
+      ? 'Internal server error'
+      : err.message
+  });
 });
 
 // ==========================
@@ -173,10 +187,10 @@ if (process.env.NODE_ENV !== 'production') {
   };
 
   https.createServer(httpsOptions, app).listen(PORT, () => {
-    console.log(`🚀 HTTPS-servern körs lokalt på https://localhost:${PORT}`);
+    console.log(`🚀 HTTPS lokal: https://localhost:${PORT}`);
   });
 } else {
   app.listen(PORT, () => {
-    console.log(`🚀 Servern körs i produktion på port ${PORT}`);
+    console.log(`🚀 Production server på port ${PORT}`);
   });
 }
