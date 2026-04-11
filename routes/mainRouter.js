@@ -1,6 +1,4 @@
-// routes/mainRouter.js
 const express = require("express");
-const passport = require("passport");
 
 // Routrar
 const loginRouter = require("./loginRouter");
@@ -8,13 +6,14 @@ const overpassRouter = require("./overpass");
 const companiesRouter = require("./companyRoutes");
 const jobAdsRouter = require("./jobAdsRouter");
 
-// Middleware för rollkontroll
+// 🔐 ROUTE MIDDLEWARES (FIXED)
+const authenticate = require("../middlewares/authenticate");
 const requireRoles = require("../middlewares/roleMiddleware");
 
 const router = express.Router();
 
 // ==============================
-// 🎯 LOGIN (public)
+// 🎯 AUTH (public)
 // ==============================
 router.use("/auth", loginRouter);
 
@@ -26,50 +25,39 @@ router.get("/test-open", (req, res) => {
 });
 
 // ==============================
-// 🔐 SKYDDADE ROUTES
+// 🔐 PROTECTED ROUTE
 // ==============================
-
-// Protected route (JWT)
-router.get(
-  "/protected",
-  passport.authenticate("jwt", { session: false, failWithError: true }),
-  (req, res) => {
-    res.json({
-      message: "Skyddad resurs",
-      user: req.user,
-    });
-  },
-  (err, req, res, next) => {
-    if (err) {
-      return res.status(401).json({
-        error: "Ogiltig token eller ingen token",
-      });
-    }
-    next(err);
-  }
-);
+router.get("/protected", authenticate, (req, res) => {
+  res.json({
+    message: "Skyddad resurs",
+    user: req.user,
+  });
+});
 
 // ==============================
 // 🔐 ROLE-BASED ROUTES
 // ==============================
 
+// Overpass
 router.use(
   "/overpass",
-  passport.authenticate("jwt", { session: false }),
+  authenticate,
   requireRoles({ roles: ["admin", "handläggare"] }),
   overpassRouter
 );
 
+// Companies
 router.use(
   "/companies",
-  passport.authenticate("jwt", { session: false }),
+  authenticate,
   requireRoles({ roles: ["admin", "handläggare"] }),
   companiesRouter
 );
 
+// Job search
 router.use(
   "/jobsearch",
-  passport.authenticate("jwt", { session: false }),
+  authenticate,
   requireRoles({ roles: ["admin", "handläggare"] }),
   jobAdsRouter
 );

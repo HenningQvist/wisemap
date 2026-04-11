@@ -1,6 +1,5 @@
 const express = require('express');
 const dotenv = require('dotenv');
-const passport = require('passport');
 const morgan = require('morgan');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -14,143 +13,96 @@ const protectedRoutes = require('./routes/mainRouter');
 const applyMiddleware = require('./middlewares/middleware');
 
 // ==========================
-// 🌱 ENV
+// ENV
 // ==========================
 if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
-  console.log('🌱 Miljövariabler laddade från .env');
 }
 
-console.log('🌍 NODE_ENV:', process.env.NODE_ENV);
-
-// ==========================
-// ❗ ENV CHECK
-// ==========================
-const requiredVars = ['DB_USER', 'DB_PASS', 'DB_HOST', 'DB_NAME', 'JWT_SECRET'];
-
-requiredVars.forEach((v) => {
-  if (!process.env[v]) {
-    console.error(`❌ Saknad miljövariabel: ${v}`);
-    process.exit(1);
-  }
-});
-
-// ==========================
-// 🚀 APP
-// ==========================
 const app = express();
 
-// Trust proxy (Railway / production)
+// ==========================
+// TRUST PROXY
+// ==========================
 if (process.env.NODE_ENV === 'production') {
   app.set('trust proxy', 1);
 }
 
 // ==========================
-// 🔒 RATE LIMITS
-// ==========================
-const globalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { error: "För många requests" },
-});
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
-  message: { error: "För många loginförsök" },
-});
-
-// ==========================
-// 🛡️ SECURITY
+// SECURITY
 // ==========================
 app.use(helmet());
 
+// ==========================
+// CORS
+// ==========================
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 if (process.env.NODE_ENV !== 'production') {
-  app.use(morgan('dev'));
-} else {
-  app.use(morgan('combined'));
+  allowedOrigins.push('http://localhost:3000', 'https://localhost:3000');
 }
 
-
-
-// ==========================
-// 📦 BODY PARSER
-// ==========================
-app.use(express.json({ limit: "10kb" }));
-
-// ❌ COOKIE PARSER BORTTAGEN (BEARER ONLY)
-
-// ==========================
-// 🔥 DEBUG LOGGER
-// ==========================
-app.use((req, res, next) => {
-  console.log('\n==============================');
-  console.log('📥 REQUEST');
-  console.log('➡️ Method:', req.method);
-  console.log('➡️ URL:', req.originalUrl);
-  console.log('➡️ Origin:', req.headers.origin);
-  console.log('➡️ Authorization:', req.headers.authorization || '❌ none');
-  console.log('==============================\n');
-
-  next();
-});
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
+    if (allowedOrigins.includes(origin)) return cb(null, true);
+    return cb(new Error('CORS blocked'));
+  },
+  credentials: false,
+}));
 
 // ==========================
-// 🔐 GLOBAL RATE LIMIT
+// BODY PARSER (VIKTIGT HÄR)
 // ==========================
-app.use(globalLimiter);
+app.use(express.json({ limit: '10kb' }));
 
 // ==========================
-// 🔑 PASSPORT JWT
+// LOGGING
 // ==========================
-require('./config/passport')(passport);
-app.use(passport.initialize());
+if (process.env.NODE_ENV !== 'production') {
+  app.use(morgan('dev'));
+}
 
 // ==========================
-// ⚙️ CUSTOM MIDDLEWARE
+// APPLY CUSTOM MIDDLEWARE
 // ==========================
 applyMiddleware(app);
 
 // ==========================
-// 📁 STATIC
+// ROUTES
 // ==========================
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-
-// ==========================
-// 🚀 ROUTES
-// ==========================
-app.use('/api/auth', authLimiter, authRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api', protectedRoutes);
 
 // ==========================
-// ❌ ERROR HANDLER
+// ERROR HANDLER
 // ==========================
 app.use((err, req, res, next) => {
-  console.error('💥 ERROR:', err.message);
-
+  console.error(err);
   res.status(500).json({
-    error: process.env.NODE_ENV === 'production'
-      ? 'Internal server error'
-      : err.message
+    error: err.message,
   });
 });
 
 // ==========================
-// 🚀 START SERVER
+// START
 // ==========================
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== 'production') {
   const httpsOptions = {
-    key: fs.readFileSync(process.env.SSL_KEY_FILE || 'localhost-key.pem'),
-    cert: fs.readFileSync(process.env.SSL_CRT_FILE || 'localhost.pem')
+    key: fs.readFileSync('localhost-key.pem'),
+    cert: fs.readFileSync('localhost.pem'),
   };
 
   https.createServer(httpsOptions, app).listen(PORT, () => {
-    console.log(`🚀 HTTPS lokal: https://localhost:${PORT}`);
+    console.log(`🚀 https://localhost:${PORT}`);
   });
 } else {
   app.listen(PORT, () => {
-    console.log(`🚀 Production server på port ${PORT}`);
+    console.log(`🚀 Server running ${PORT}`);
   });
 }
