@@ -5,6 +5,7 @@ const loginRouter = require("./loginRouter");
 const overpassRouter = require("./overpass");
 const companiesRouter = require("./companyRoutes");
 const jobAdsRouter = require("./jobAdsRouter");
+const documentRouter = require("./documentRouter");
 
 // 🔐 ROUTE MIDDLEWARES (FIXED)
 const authenticate = require("../middlewares/authenticate");
@@ -60,6 +61,14 @@ router.use(
   authenticate,
   requireRoles({ roles: ["admin", "handläggare"] }),
   jobAdsRouter
+);
+
+// Documents
+router.use(
+  "/documents",
+  authenticate,
+  requireRoles({ roles: ["admin", "handläggare"] }),
+  documentRouter
 );
 
 module.exports = router;
